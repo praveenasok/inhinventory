@@ -47,6 +47,10 @@ export default function Approvals() {
       // 1. If it's Fancy, create the new lot
       if (transformationData.targetProduct === 'Fancy' && pendingFancyLot) {
         await setDocument('lots', pendingFancyLot.id, pendingFancyLot);
+      } else if (transformationData.targetProduct === 'Segregated Goli' && transformationData.pendingSegregatedLots) {
+        for (const lot of transformationData.pendingSegregatedLots) {
+          await setDocument('lots', lot.id, lot);
+        }
       } else if (transformationData.outputs) {
         // 2. If it's INH, update the inventory collection
         for (const out of transformationData.outputs) {
@@ -281,6 +285,27 @@ export default function Approvals() {
                           <span className="font-bold">{doc.totalOutput} Kg</span>
                           <span className="text-emerald-700 font-medium">₹{doc.effectiveCostPerKg?.toLocaleString()} / Kg</span>
                         </div>
+                      </div>
+                    ) : doc.targetProduct === 'Segregated Goli' ? (
+                      <div className="border border-stone-200 rounded-lg overflow-hidden">
+                        <table className="min-w-full divide-y divide-stone-200">
+                          <thead className="bg-stone-50">
+                            <tr>
+                              <th className="px-4 py-2 text-left text-xs font-bold text-stone-500 uppercase">Color</th>
+                              <th className="px-4 py-2 text-right text-xs font-bold text-stone-500 uppercase">Weight</th>
+                              <th className="px-4 py-2 text-right text-xs font-bold text-stone-500 uppercase">Rate</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-stone-200">
+                            {doc.pendingSegregatedLots?.map((lot, idx) => (
+                              <tr key={idx} className="hover:bg-stone-50">
+                                <td className="px-4 py-2 text-sm font-medium text-stone-900">{lot.color}</td>
+                                <td className="px-4 py-2 text-sm font-bold text-blue-600 text-right">{lot.initialWeight} Kg</td>
+                                <td className="px-4 py-2 text-sm text-emerald-700 text-right">₹{lot.pricePerUnit?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / Kg</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     ) : (
                       <div className="border border-stone-200 rounded-lg overflow-hidden">

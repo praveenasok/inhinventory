@@ -4,6 +4,7 @@ import { CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const LENGTH_OPTIONS = Array.from({ length: 48 }, (_, i) => i + 3); // 3 to 50
+const COLORS = ['Dyed Black', 'Natural Black', 'Natural Brown', 'Light Brown', 'Mehendi', 'Grey', 'White', 'Mixed'];
 
 export default function ProcessingWizard() {
   const { permissions } = useAuth();
@@ -26,6 +27,9 @@ export default function ProcessingWizard() {
   const [fancyOutputWeight, setFancyOutputWeight] = useState('');
   const [targetOutput, setTargetOutput] = useState('INHNR1x1');
   const [inhnrOutputs, setInhnrOutputs] = useState([{ length: '12', weight: '' }]);
+  const [segregatedOutputs, setSegregatedOutputs] = useState(
+    COLORS.reduce((acc, color) => ({ ...acc, [color]: '' }), {})
+  );
   
   // Wastage State
   const [wastage, setWastage] = useState({
@@ -72,7 +76,7 @@ export default function ProcessingWizard() {
       const lot = lots.find(l => l.id === selectedLotId);
       setSelectedLot(lot);
       if (lot) {
-        if (lot.materialType !== 'Goli' && lot.materialType !== 'Fancy') {
+        if (!['Goli', 'Segregated Goli', 'Fancy'].includes(lot.materialType)) {
           if (lot.lengths) {
             setInputLengths(lot.lengths.map(l => ({ length: l.length, weight: '', maxWeight: l.weight })));
           } else {
@@ -83,7 +87,12 @@ export default function ProcessingWizard() {
           setInputLengths([]);
           setInputWeight(lot.remainingWeight ?? lot.initialWeight); 
         }
-        setTargetOutput(lot.materialType === 'Goli' ? 'Fancy' : 'INHNR1x1');
+        
+        let newTargetOutput = 'INHNR1x1';
+        if (lot.materialType === 'Goli') newTargetOutput = 'Segregated Goli';
+        else if (lot.materialType === 'Segregated Goli') newTargetOutput = 'Fancy';
+        
+        setTargetOutput(newTargetOutput);
         
         // Find default labor cost
         const mat = rawMaterials.find(r => r.name === lot.materialType);
@@ -98,12 +107,13 @@ export default function ProcessingWizard() {
       setInputWeight('');
       setInputLengths([]);
       setTargetOutput('INHNR1x1');
+      setSegregatedOutputs(COLORS.reduce((acc, color) => ({ ...acc, [color]: '' }), {}));
       setLaborCost('');
     }
   }, [selectedLotId, lots, rawMaterials]);
 
   useEffect(() => {
-    if (selectedLot && selectedLot.materialType !== 'Goli' && selectedLot.materialType !== 'Fancy') {
+    if (selectedLot && !['Goli', 'Segregated Goli', 'Fancy'].includes(selectedLot.materialType)) {
       const sum = inputLengths.reduce((s, l) => s + Number(l.weight || 0), 0);
       setInputWeight(sum.toString());
     }
@@ -115,6 +125,9 @@ export default function ProcessingWizard() {
 
   const getOutputSum = () => {
     if (targetOutput === 'Fancy') return Number(fancyOutputWeight || 0);
+    if (targetOutput === 'Segregated Goli') {
+      return Object.values(segregatedOutputs).reduce((sum, val) => sum + Number(val || 0), 0);
+    }
     return inhnrOutputs.reduce((sum, out) => sum + Number(out.weight || 0), 0);
   };
 
@@ -128,7 +141,7 @@ export default function ProcessingWizard() {
     } else {
       setYieldPercentage(0);
     }
-  }, [inputWeight, fancyOutputWeight, inhnrOutputs, wastage]);
+  }, [inputWeight, fancyOutputWeight, inhnrOutputs, segregatedOutputs, wastage]);
 
   // Cost calculations
   const inputCost = selectedLot && Number(inputWeight) > 0 && selectedLot.initialWeight > 0
@@ -144,6 +157,10 @@ export default function ProcessingWizard() {
 
   const handleWastageChange = (field, value) => {
     setWastage(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSegregatedOutputChange = (color, value) => {
+    setSegregatedOutputs(prev => ({ ...prev, [color]: value }));
   };
 
   const handleAddInhnrOutput = () => {
@@ -189,7 +206,7 @@ export default function ProcessingWizard() {
       return;
     }
 
-    if (selectedLot.materialType !== 'Goli' && selectedLot.materialType !== 'Fancy') {
+    if (!['Goli', 'Segregated Goli', 'Fancy'].includes(selectedLot.materialType)) {
       const invalidLengths = inputLengths.filter(il => Number(il.weight || 0) > il.maxWeight);
       if (invalidLengths.length > 0) {
         alert("Input weight for specific lengths cannot exceed their available weight!");
@@ -223,7 +240,7 @@ export default function ProcessingWizard() {
       const transformationData = {
         inputLotId: selectedLotId,
         inputWeight: inW,
-        inputLengths: selectedLot.materialType !== 'Goli' && selectedLot.materialType !== 'Fancy' 
+        inputLengths: !['Goli', 'Segregated Goli', 'Fancy'].includes(selectedLot.materialType)
           ? inputLengths.filter(l => Number(l.weight || 0) > 0).map(l => ({ length: l.length, weight: Number(l.weight) }))
           : null,
         targetProduct: targetOutput,
@@ -259,6 +276,7 @@ export default function ProcessingWizard() {
           id: newLotId,
           supplierId: selectedLot.supplierId || null, 
           materialType: 'Fancy',
+          color: selectedLot.color || null,
           initialWeight: outW,
           remainingWeight: outW,
           pricePerUnit: effectiveCostPerKg || 0, 
@@ -268,6 +286,42 @@ export default function ProcessingWizard() {
           currentStage: 'Initial',
           parentLotId: selectedLotId
         };
+      } else if (targetOutput === 'Segregated Goli') {
+        const supplier = suppliers.find(s => s.id === selectedLot.supplierId);
+        const supplierCode = supplier?.code ? supplier.code.toUpperCase() : 'UNK';
+        
+        const pendingSegregatedLots = [];
+        
+        for (const color of COLORS) {
+          const weight = Number(segregatedOutputs[color]);
+          if (weight > 0) {
+            currentSeq++;
+            const colorCode = color.replace(/\s+/g, '_').toUpperCase();
+            const newLotId = `LOT-GOLI-${colorCode}-${supplierCode}-${weight}KG-${dateStr}-${currentSeq}`;
+            
+            // Allocate total cost pool by weight ratio
+            const weightRatio = weight / outW;
+            const allocatedCost = totalCostPool * weightRatio;
+            const rate = allocatedCost / weight;
+            
+            pendingSegregatedLots.push({
+              id: newLotId,
+              supplierId: selectedLot.supplierId || null,
+              materialType: 'Segregated Goli',
+              color: color,
+              initialWeight: weight,
+              remainingWeight: weight,
+              pricePerUnit: rate,
+              totalCost: allocatedCost,
+              purchaseDate: new Date(),
+              status: 'Raw',
+              currentStage: 'Initial',
+              parentLotId: selectedLotId
+            });
+          }
+        }
+        
+        transformationData.pendingSegregatedLots = pendingSegregatedLots;
       } else {
         // Output is INHNR1x1 or INHMR1x1
         
@@ -344,6 +398,7 @@ export default function ProcessingWizard() {
         setSelectedLotId('');
         setFancyOutputWeight('');
         setInhnrOutputs([{ length: '12', weight: '' }]);
+        setSegregatedOutputs(COLORS.reduce((acc, color) => ({ ...acc, [color]: '' }), {}));
         setInputLengths([]);
         setWastage({
           moistureLoss: '', handlingWastage: '', shortHair: '', rubberBands: '', 
@@ -394,7 +449,7 @@ export default function ProcessingWizard() {
                 >
                   <option value="">-- Select a Lot --</option>
                   {lots.map(l => (
-                    <option key={l.id} value={l.id}>{l.id} ({l.materialType} - {(l.remainingWeight ?? l.initialWeight).toFixed(2)}Kg available)</option>
+                    <option key={l.id} value={l.id}>{l.id} ({l.materialType}{l.color ? ` - ${l.color}` : ''} - {(l.remainingWeight ?? l.initialWeight).toFixed(2)}Kg available)</option>
                   ))}
                 </select>
 
@@ -420,7 +475,7 @@ export default function ProcessingWizard() {
               )}
 
               <div className="col-span-2">
-                {selectedLot && selectedLot.materialType !== 'Goli' && selectedLot.materialType !== 'Fancy' ? (
+                {selectedLot && !['Goli', 'Segregated Goli', 'Fancy'].includes(selectedLot.materialType) ? (
                   <div className="mt-4">
                     <label className="block text-sm font-medium text-gray-700 mb-2">Input Weight by Length (Kg)</label>
                     {inputLengths.length === 0 ? (
@@ -490,6 +545,23 @@ export default function ProcessingWizard() {
                     className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border" 
                   />
                   <p className="text-xs text-gray-500 mt-1">This will create a new Fancy LOT.</p>
+                </div>
+              ) : targetOutput === 'Segregated Goli' ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
+                  {COLORS.map(color => (
+                    <div key={color} className="bg-purple-50 p-3 rounded-md border border-purple-100">
+                      <label className="block text-xs font-semibold text-purple-800 mb-1">{color}</label>
+                      <input 
+                        type="number" 
+                        step="0.01"
+                        min="0"
+                        value={segregatedOutputs[color]}
+                        onChange={(e) => handleSegregatedOutputChange(color, e.target.value)}
+                        placeholder="0.00"
+                        className="block w-full rounded-md border-purple-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 sm:text-sm p-1.5 border bg-white" 
+                      />
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <div className="space-y-4">

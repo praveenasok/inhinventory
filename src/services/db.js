@@ -34,6 +34,7 @@ export const getCollection = async (collectionName, filters = [], orderByField =
 export const seedRawMaterials = async () => {
   const defaultMaterials = [
     { name: 'Goli', format: 'weight-based' },
+    { name: 'Segregated Goli', format: 'weight-based' },
     { name: 'Fancy', format: 'weight-based' },
     { name: 'Non-Remy Double Drawn', format: 'length-based' },
     { name: 'Non-Remy 1x1', format: 'length-based' },
