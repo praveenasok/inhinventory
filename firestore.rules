@@ -1,0 +1,39 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Check if user is signed in
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    // Check if user is the super admin or has an admin role in allowed_users
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == "info@indiannaturalhair.com" || 
+        get(/databases/$(database)/documents/allowed_users/$(request.auth.token.email)).data.role == "admin"
+      );
+    }
+
+    // Check if user has access (either super admin or exists in allowed_users)
+    function hasAccess() {
+      return isSignedIn() && (
+        request.auth.token.email == "info@indiannaturalhair.com" || 
+        exists(/databases/$(database)/documents/allowed_users/$(request.auth.token.email))
+      );
+    }
+
+    // allowed_users collection rules
+    match /allowed_users/{email} {
+      // Anyone with access can read the allowed users list (useful for UI)
+      allow read: if hasAccess();
+      // Only admins can modify the allowed users list
+      allow write: if isAdmin();
+    }
+
+    // Default rules for all other collections (inventory, lots, suppliers, transformations, etc)
+    match /{document=**} {
+      allow read, write: if hasAccess();
+    }
+  }
+}
