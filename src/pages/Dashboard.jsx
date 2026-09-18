@@ -1,8 +1,62 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Package, Users, ShoppingCart, RefreshCw } from 'lucide-react';
+import { Package, Users, ShoppingCart, RefreshCw, Scale, IndianRupee } from 'lucide-react';
+import { getCollectionAggregate, getCollection } from '../services/db';
+import { useAuth } from '../context/AuthContext';
 
 export default function Dashboard() {
+  const { permissions } = useAuth();
+  const showFinancials = permissions?.financials;
+
+  const [purchaseTotals, setPurchaseTotals] = useState({ weight: 0, value: 0 });
+  const [inventoryTotals, setInventoryTotals] = useState({ weight: 0, value: 0 });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      setLoading(true);
+      try {
+        let aggData = { remainingWeight: 0, totalCost: 0, initialWeight: 0 };
+        try {
+          aggData = await getCollectionAggregate('lots', ['remainingWeight', 'totalCost', 'initialWeight']);
+        } catch (e) {
+          console.warn("Lots aggregation failed", e);
+        }
+        
+        const avgGlobalRate = (aggData.totalCost || 0) / (aggData.initialWeight || 1);
+        setPurchaseTotals({
+          weight: aggData.remainingWeight || 0,
+          value: (aggData.remainingWeight || 0) * avgGlobalRate
+        });
+
+        const invData = await getCollection('inventory');
+        let invTotals = { weight: 0, value: 0 };
+        
+        try {
+          const invAgg = await getCollectionAggregate('inventory', ['quantityAvailable', 'totalValue']);
+          invTotals.weight = invAgg.quantityAvailable || 0;
+          invTotals.value = invAgg.totalValue || 0;
+        } catch (e) {
+          console.warn("Inventory aggregation failed", e);
+          // Fallback to client side sum
+          invTotals = invData.reduce((acc, item) => {
+            acc.weight += (item.quantityAvailable || 0);
+            acc.value += (item.totalValue || 0);
+            return acc;
+          }, { weight: 0, value: 0 });
+        }
+        
+        setInventoryTotals(invTotals);
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -13,31 +67,53 @@ export default function Dashboard() {
         
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 flex items-center space-x-4">
           <div className="p-3 rounded-full bg-blue-100 text-blue-600">
-            <Package className="w-8 h-8" />
+            <ShoppingCart className="w-8 h-8" />
           </div>
-          <div>
-            <p className="text-sm text-gray-500 font-medium">Total SKUs</p>
-            <p className="text-2xl font-bold text-gray-900">Manage</p>
+          <div className="flex-1">
+            <p className="text-sm text-gray-500 font-medium">Raw Materials (Purchases)</p>
+            {loading ? (
+              <p className="text-sm text-gray-400 mt-1">Loading...</p>
+            ) : (
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{purchaseTotals.weight.toFixed(2)} Kg</p>
+                {showFinancials && (
+                  <p className="text-sm text-green-600 font-medium mt-1">
+                    ₹{purchaseTotals.value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 flex items-center space-x-4">
           <div className="p-3 rounded-full bg-green-100 text-green-600">
-            <Users className="w-8 h-8" />
+            <Package className="w-8 h-8" />
           </div>
-          <div>
-            <p className="text-sm text-gray-500 font-medium">Suppliers</p>
-            <p className="text-2xl font-bold text-gray-900">Active</p>
+          <div className="flex-1">
+            <p className="text-sm text-gray-500 font-medium">Finished Goods (Inventory)</p>
+            {loading ? (
+              <p className="text-sm text-gray-400 mt-1">Loading...</p>
+            ) : (
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{inventoryTotals.weight.toFixed(2)} Kg</p>
+                {showFinancials && (
+                  <p className="text-sm text-green-600 font-medium mt-1">
+                    ₹{inventoryTotals.value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 flex items-center space-x-4">
           <div className="p-3 rounded-full bg-yellow-100 text-yellow-600">
-            <ShoppingCart className="w-8 h-8" />
+            <Users className="w-8 h-8" />
           </div>
           <div>
-            <p className="text-sm text-gray-500 font-medium">Active Lots</p>
-            <p className="text-2xl font-bold text-gray-900">Track</p>
+            <p className="text-sm text-gray-500 font-medium">Suppliers</p>
+            <p className="text-2xl font-bold text-gray-900">Manage</p>
           </div>
         </div>
 

@@ -14,3 +14,10 @@ body {
   color: #0f172a;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
+
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}

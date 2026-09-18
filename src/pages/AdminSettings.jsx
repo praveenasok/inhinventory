@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { getCollection, addDocument, setDocument, deleteDocument } from '../services/db';
+import { getCollection, addDocument, setDocument, updateDocument, deleteDocument, seedMockData } from '../services/db';
 import { db, auth } from '../services/firebase';
 import { collection, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
-import { Shield, UserPlus, Trash2, Mail, CheckCircle2, LayoutDashboard, PackageOpen, Scissors, List, Users, DollarSign, Database, Tag, Calculator } from 'lucide-react';
+import { Shield, UserPlus, Trash2, Mail, CheckCircle2, LayoutDashboard, PackageOpen, Scissors, List, Users, DollarSign, Database, Tag, Calculator, IndianRupee, Building2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function AdminSettings() {
@@ -42,6 +42,25 @@ export default function AdminSettings() {
   };
   const [newTableFactors, setNewTableFactors] = useState(generateDefaultFactors());
 
+  // Standard Rate Lists State
+  const [standardRateLists, setStandardRateLists] = useState([]);
+  const [newRateListName, setNewRateListName] = useState('');
+  const [editingRateListId, setEditingRateListId] = useState(null);
+  
+  const generateDefaultRates = () => {
+    const rates = {};
+    for (let i = 4; i <= 50; i++) {
+      rates[i] = 0;
+    }
+    return rates;
+  };
+  const [newRateListRates, setNewRateListRates] = useState(generateDefaultRates());
+
+  // Workrooms State
+  const [workrooms, setWorkrooms] = useState([]);
+  const [newWorkroom, setNewWorkroom] = useState({ name: '', address: '', incharge: '', phone: '', code: '' });
+  const [editingWorkroomId, setEditingWorkroomId] = useState(null);
+
   const { isAdminUser } = useAuth();
 
   useEffect(() => {
@@ -73,9 +92,31 @@ export default function AdminSettings() {
       setLoading(false);
     });
 
+    const unsubscribeStandardRates = onSnapshot(collection(db, 'standard_rates'), (snapshot) => {
+      const ratesData = [];
+      snapshot.forEach((doc) => {
+        ratesData.push({ id: doc.id, ...doc.data() });
+      });
+      setStandardRateLists(ratesData);
+    }, (err) => {
+      console.error("Error fetching standard rates:", err);
+    });
+
+    const unsubscribeWorkrooms = onSnapshot(collection(db, 'workrooms'), (snapshot) => {
+      const workroomsData = [];
+      snapshot.forEach((doc) => {
+        workroomsData.push({ id: doc.id, ...doc.data() });
+      });
+      setWorkrooms(workroomsData);
+    }, (err) => {
+      console.error("Error fetching workrooms:", err);
+    });
+
     return () => {
       unsubscribeUsers();
       unsubscribeMultipliers();
+      unsubscribeStandardRates();
+      unsubscribeWorkrooms();
     };
   }, [isAdminUser]);
 
@@ -201,6 +242,114 @@ export default function AdminSettings() {
     }));
   };
 
+  const handleAddStandardRateList = async (e) => {
+    e.preventDefault();
+    if (!newRateListName) return;
+    
+    try {
+      if (editingRateListId) {
+        await updateDocument('standard_rates', editingRateListId, {
+          name: newRateListName,
+          rates: newRateListRates,
+          updatedAt: new Date()
+        });
+        setSuccess(`Standard rate list "${newRateListName}" updated successfully`);
+      } else {
+        await addDocument('standard_rates', {
+          name: newRateListName,
+          rates: newRateListRates,
+          createdAt: new Date()
+        });
+        setSuccess(`Standard rate list "${newRateListName}" added successfully`);
+      }
+      setNewRateListName('');
+      setNewRateListRates(generateDefaultRates());
+      setEditingRateListId(null);
+    } catch (err) {
+      console.error("Error saving standard rate list:", err);
+      setError("Failed to save standard rate list");
+    }
+  };
+
+  const handleEditStandardRateList = (rateList) => {
+    setEditingRateListId(rateList.id);
+    setNewRateListName(rateList.name);
+    // Fill missing rates with 0 just in case
+    const filledRates = generateDefaultRates();
+    Object.keys(rateList.rates || {}).forEach(k => {
+      filledRates[k] = rateList.rates[k];
+    });
+    setNewRateListRates(filledRates);
+    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+  };
+
+  const handleDeleteStandardRateList = async (listId, listName) => {
+    if (!window.confirm(`Are you sure you want to delete the standard rate list "${listName}"?`)) return;
+    try {
+      await deleteDoc(doc(db, 'standard_rates', listId));
+      setSuccess(`Rate list "${listName}" deleted`);
+    } catch (err) {
+      console.error("Error deleting rate list:", err);
+      setError("Failed to delete rate list");
+    }
+  };
+
+  const handleRateChange = (length, val) => {
+    setNewRateListRates(prev => ({
+      ...prev,
+      [length]: Number(val) || 0
+    }));
+  };
+
+  const handleAddWorkroom = async (e) => {
+    e.preventDefault();
+    if (!newWorkroom.name || !newWorkroom.code) return;
+    
+    try {
+      if (editingWorkroomId) {
+        await updateDocument('workrooms', editingWorkroomId, {
+          ...newWorkroom,
+          updatedAt: new Date()
+        });
+        setSuccess(`Workroom "${newWorkroom.name}" updated successfully`);
+      } else {
+        await addDocument('workrooms', {
+          ...newWorkroom,
+          createdAt: new Date()
+        });
+        setSuccess(`Workroom "${newWorkroom.name}" added successfully`);
+      }
+      setNewWorkroom({ name: '', address: '', incharge: '', phone: '', code: '' });
+      setEditingWorkroomId(null);
+    } catch (err) {
+      console.error("Error saving workroom:", err);
+      setError("Failed to save workroom");
+    }
+  };
+
+  const handleEditWorkroom = (workroom) => {
+    setEditingWorkroomId(workroom.id);
+    setNewWorkroom({
+      name: workroom.name || '',
+      address: workroom.address || '',
+      incharge: workroom.incharge || '',
+      phone: workroom.phone || '',
+      code: workroom.code || ''
+    });
+    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+  };
+
+  const handleDeleteWorkroom = async (id, name) => {
+    if (!window.confirm(`Are you sure you want to delete the workroom "${name}"?`)) return;
+    try {
+      await deleteDoc(doc(db, 'workrooms', id));
+      setSuccess(`Workroom "${name}" deleted`);
+    } catch (err) {
+      console.error("Error deleting workroom:", err);
+      setError("Failed to delete workroom");
+    }
+  };
+
   if (!isAdminUser) {
     return (
       <div className="p-8 text-center max-w-lg mx-auto">
@@ -229,6 +378,24 @@ export default function AdminSettings() {
         <div>
           <h1 className="text-2xl font-bold text-stone-900">Access Management</h1>
           <p className="text-stone-500">Manage granular permissions for INH Inventory System</p>
+        </div>
+        <div className="ml-auto flex gap-3">
+          <button 
+            onClick={async () => {
+              setLoading(true);
+              try {
+                await seedMockData();
+                setSuccess("Mock data seeded successfully!");
+              } catch (e) {
+                setError("Failed to seed mock data.");
+              }
+              setLoading(false);
+            }}
+            className="flex items-center space-x-2 bg-stone-900 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-stone-800 shadow-sm transition-all"
+          >
+            <Database className="w-4 h-4" />
+            <span>Seed Mock Data</span>
+          </button>
         </div>
       </div>
 
@@ -541,6 +708,314 @@ export default function AdminSettings() {
                 >
                   <Database className="w-4 h-4" />
                   {editingTableId ? 'Update Table' : 'Save Table'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      {/* Standard Rate Lists Section */}
+      <div className="flex items-center gap-3 mb-8 mt-12">
+        <div className="w-12 h-12 bg-stone-900 rounded-xl flex items-center justify-center">
+          <IndianRupee className="w-6 h-6 text-amber-500" />
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold text-stone-900">Standard Rate Lists</h2>
+          <p className="text-stone-500">Manage standard market rates for yield comparison</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
+        <div className="lg:col-span-12">
+          <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden">
+            <div className="px-6 py-5 border-b border-stone-100 flex justify-between items-center bg-stone-50/50">
+              <h3 className="text-lg font-semibold text-stone-900">Available Rate Lists</h3>
+              <span className="bg-stone-100 text-stone-600 py-1 px-3 rounded-full text-xs font-semibold">
+                {standardRateLists.length} Lists
+              </span>
+            </div>
+            
+            {standardRateLists.length === 0 ? (
+              <div className="p-12 text-center text-stone-500">
+                No standard rate lists created yet. Add one below.
+              </div>
+            ) : (
+              <div className="divide-y divide-stone-100 overflow-x-auto">
+                <table className="min-w-full divide-y divide-stone-200">
+                  <thead className="bg-stone-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-stone-500 uppercase tracking-wider">List Name</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Key Rates (Preview)</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-stone-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-stone-200">
+                    {standardRateLists.map((list) => (
+                      <tr key={list.id}>
+                        <td className="px-6 py-4 whitespace-nowrap font-medium text-stone-900">{list.name}</td>
+                        <td className="px-6 py-4 text-sm text-stone-500">
+                          10": ₹{list.rates[10]}, 20": ₹{list.rates[20]}, 30": ₹{list.rates[30]}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <button
+                            onClick={() => handleEditStandardRateList(list)}
+                            className="text-blue-600 hover:text-blue-900 mr-4"
+                          >
+                            Edit / View
+                          </button>
+                          <button
+                            onClick={() => handleDeleteStandardRateList(list.id, list.name)}
+                            className="text-red-600 hover:text-red-900"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="lg:col-span-12 space-y-6">
+          <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-semibold text-stone-900 flex items-center gap-2">
+                <IndianRupee className="w-5 h-5 text-amber-500" />
+                {editingRateListId ? 'Edit / View Rate List' : 'Create New Rate List'}
+              </h3>
+              {editingRateListId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingRateListId(null);
+                    setNewRateListName('');
+                    setNewRateListRates(generateDefaultRates());
+                  }}
+                  className="text-sm text-stone-500 hover:text-stone-700"
+                >
+                  Cancel Edit
+                </button>
+              )}
+            </div>
+            
+            <form onSubmit={handleAddStandardRateList} className="space-y-6">
+              <div className="max-w-md">
+                <label className="block text-sm font-medium text-stone-700 mb-1">
+                  Rate List Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newRateListName}
+                  onChange={(e) => setNewRateListName(e.target.value)}
+                  className="block w-full px-3 py-2 border border-stone-300 rounded-md shadow-sm focus:ring-stone-500 focus:border-stone-500 sm:text-sm"
+                  placeholder="e.g. Q3 Market Rates"
+                />
+              </div>
+
+              <div>
+                <h4 className="text-sm font-medium text-stone-700 mb-3">Rates by Length (4" to 50")</h4>
+                <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-12 gap-3 max-h-96 overflow-y-auto p-2 border border-stone-100 rounded-lg bg-stone-50/50">
+                  {Object.keys(newRateListRates).map(length => (
+                    <div key={length} className="flex flex-col">
+                      <label className="text-[10px] font-medium text-stone-500 mb-1 text-center">{length}"</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        required
+                        value={newRateListRates[length]}
+                        onChange={(e) => handleRateChange(length, e.target.value)}
+                        className="block w-full px-2 py-1 text-center text-sm border border-stone-300 rounded-md focus:ring-stone-500 focus:border-stone-500"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-stone-500 mt-2">Set the standard price per kg for each length.</p>
+              </div>
+
+              <div className="flex justify-end pt-4 border-t border-stone-100">
+                <button
+                  type="submit"
+                  disabled={!newRateListName}
+                  className="px-6 py-2.5 bg-stone-900 text-white rounded-xl hover:bg-stone-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm flex items-center gap-2"
+                >
+                  <Database className="w-4 h-4" />
+                  {editingRateListId ? 'Update Rate List' : 'Save Rate List'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      {/* Workrooms Section */}
+      <div className="flex items-center gap-3 mb-8 mt-12">
+        <div className="w-12 h-12 bg-stone-900 rounded-xl flex items-center justify-center">
+          <Building2 className="w-6 h-6 text-amber-500" />
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold text-stone-900">Workrooms</h2>
+          <p className="text-stone-500">Manage physical locations for inventory processing</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
+        <div className="lg:col-span-12">
+          <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden">
+            <div className="px-6 py-5 border-b border-stone-100 flex justify-between items-center bg-stone-50/50">
+              <h3 className="text-lg font-semibold text-stone-900">Available Workrooms</h3>
+              <span className="bg-stone-100 text-stone-600 py-1 px-3 rounded-full text-xs font-semibold">
+                {workrooms.length} Workrooms
+              </span>
+            </div>
+            
+            {workrooms.length === 0 ? (
+              <div className="p-12 text-center text-stone-500">
+                No workrooms created yet. Add one below.
+              </div>
+            ) : (
+              <div className="divide-y divide-stone-100 overflow-x-auto">
+                <table className="min-w-full divide-y divide-stone-200">
+                  <thead className="bg-stone-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Name (Code)</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Address</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-stone-500 uppercase tracking-wider">In-charge / Phone</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-stone-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-stone-200">
+                    {workrooms.map((wr) => (
+                      <tr key={wr.id}>
+                        <td className="px-6 py-4 whitespace-nowrap font-medium text-stone-900">{wr.name} ({wr.code})</td>
+                        <td className="px-6 py-4 text-sm text-stone-500">{wr.address}</td>
+                        <td className="px-6 py-4 text-sm text-stone-500">
+                          {wr.incharge} <br/> <span className="text-xs text-stone-400">{wr.phone}</span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <button
+                            onClick={() => handleEditWorkroom(wr)}
+                            className="text-blue-600 hover:text-blue-900 mr-4"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteWorkroom(wr.id, wr.name)}
+                            className="text-red-600 hover:text-red-900"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="lg:col-span-12 space-y-6">
+          <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-semibold text-stone-900 flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-amber-500" />
+                {editingWorkroomId ? 'Edit Workroom' : 'Create New Workroom'}
+              </h3>
+              {editingWorkroomId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingWorkroomId(null);
+                    setNewWorkroom({ name: '', address: '', incharge: '', phone: '', code: '' });
+                  }}
+                  className="text-sm text-stone-500 hover:text-stone-700"
+                >
+                  Cancel Edit
+                </button>
+              )}
+            </div>
+            
+            <form onSubmit={handleAddWorkroom} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-stone-700 mb-1">
+                    Workroom Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newWorkroom.name}
+                    onChange={(e) => setNewWorkroom({...newWorkroom, name: e.target.value})}
+                    className="block w-full px-3 py-2 border border-stone-300 rounded-md shadow-sm focus:ring-stone-500 focus:border-stone-500 sm:text-sm"
+                    placeholder="e.g. Main Factory"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-stone-700 mb-1">
+                    2-Digit Code
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={2}
+                    value={newWorkroom.code}
+                    onChange={(e) => setNewWorkroom({...newWorkroom, code: e.target.value.toUpperCase()})}
+                    className="block w-full px-3 py-2 border border-stone-300 rounded-md shadow-sm focus:ring-stone-500 focus:border-stone-500 sm:text-sm uppercase"
+                    placeholder="e.g. MF"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-stone-700 mb-1">
+                    Address
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={newWorkroom.address}
+                    onChange={(e) => setNewWorkroom({...newWorkroom, address: e.target.value})}
+                    className="block w-full px-3 py-2 border border-stone-300 rounded-md shadow-sm focus:ring-stone-500 focus:border-stone-500 sm:text-sm"
+                    placeholder="Full physical address"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-stone-700 mb-1">
+                    In-charge Name
+                  </label>
+                  <input
+                    type="text"
+                    value={newWorkroom.incharge}
+                    onChange={(e) => setNewWorkroom({...newWorkroom, incharge: e.target.value})}
+                    className="block w-full px-3 py-2 border border-stone-300 rounded-md shadow-sm focus:ring-stone-500 focus:border-stone-500 sm:text-sm"
+                    placeholder="Manager Name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-stone-700 mb-1">
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={newWorkroom.phone}
+                    onChange={(e) => setNewWorkroom({...newWorkroom, phone: e.target.value})}
+                    className="block w-full px-3 py-2 border border-stone-300 rounded-md shadow-sm focus:ring-stone-500 focus:border-stone-500 sm:text-sm"
+                    placeholder="+91..."
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-4 border-t border-stone-100">
+                <button
+                  type="submit"
+                  disabled={!newWorkroom.name || !newWorkroom.code}
+                  className="px-6 py-2.5 bg-stone-900 text-white rounded-xl hover:bg-stone-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm flex items-center gap-2"
+                >
+                  <Database className="w-4 h-4" />
+                  {editingWorkroomId ? 'Update Workroom' : 'Save Workroom'}
                 </button>
               </div>
             </form>

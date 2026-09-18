@@ -1,19 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Scissors, List, Users, PackageOpen, Settings, LogOut, CheckCircle2, GitBranch } from 'lucide-react';
+import { LayoutDashboard, Scissors, List, Users, PackageOpen, Settings, LogOut, CheckCircle2, GitBranch, ClipboardList, ArrowRightLeft } from 'lucide-react';
 import { auth } from './services/firebase';
 
-import Dashboard from './pages/Dashboard';
-import Purchases from './pages/Purchases';
-import Inventory from './pages/Inventory';
-import Suppliers from './pages/Suppliers';
-import ProcessingWizard from './pages/ProcessingWizard';
-import Login from './pages/Login';
-import AdminSettings from './pages/AdminSettings';
-import Approvals from './pages/Approvals';
-import Catalog from './pages/Catalog';
-import TraceViewer from './pages/TraceViewer';
-import Traceability from './pages/Traceability';
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Purchases = lazy(() => import('./pages/Purchases'));
+const Inventory = lazy(() => import('./pages/Inventory'));
+const Suppliers = lazy(() => import('./pages/Suppliers'));
+const ProcessingWizard = lazy(() => import('./pages/ProcessingWizard'));
+const Login = lazy(() => import('./pages/Login'));
+const AdminSettings = lazy(() => import('./pages/AdminSettings'));
+const Approvals = lazy(() => import('./pages/Approvals'));
+const Catalog = lazy(() => import('./pages/Catalog'));
+const TraceViewer = lazy(() => import('./pages/TraceViewer'));
+const Traceability = lazy(() => import('./pages/Traceability'));
+const ManufacturingOrders = lazy(() => import('./pages/ManufacturingOrders'));
+const StockTransfer = lazy(() => import('./pages/StockTransfer'));
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
@@ -25,9 +27,11 @@ function Sidebar() {
     { path: '/', icon: LayoutDashboard, label: 'Dashboard', module: 'dashboard' },
     { path: '/purchases', icon: PackageOpen, label: 'Purchases', module: 'purchases' },
     { path: '/processing', icon: Scissors, label: 'Processing', module: 'processing' },
+    { path: '/manufacturing', icon: ClipboardList, label: 'Manufacturing Orders', module: 'processing' },
     { path: '/inventory', icon: List, label: 'Inventory', module: 'inventory' },
     { path: '/catalog', icon: List, label: 'Catalog', module: 'catalog' },
     { path: '/suppliers', icon: Users, label: 'Suppliers', module: 'suppliers' },
+    { path: '/transfer', icon: ArrowRightLeft, label: 'Stock Transfer', module: 'inventory' },
     { path: '/traceability', icon: GitBranch, label: 'Traceability', module: 'inventory' },
   ];
 
@@ -47,7 +51,7 @@ function Sidebar() {
   const allowedNavItems = navItems.filter(item => item.module === null || permissions?.modules?.[item.module]);
 
   return (
-    <div className="w-64 h-screen bg-stone-900 text-stone-300 flex flex-col fixed left-0 top-0">
+    <div className="w-64 h-screen bg-stone-900 text-stone-300 flex flex-col fixed left-0 top-0 print:hidden">
       <div className="p-6 border-b border-stone-800">
         <h1 className="text-xl font-bold text-white tracking-wider">INH Inventory</h1>
       </div>
@@ -89,9 +93,9 @@ function Sidebar() {
 
 function Layout({ children }) {
   return (
-    <div className="flex bg-stone-50 min-h-screen">
+    <div className="flex bg-stone-50 print:bg-white min-h-screen print:min-h-0 print:h-auto print:block">
       <Sidebar />
-      <main className="flex-1 ml-64 p-8 overflow-y-auto">
+      <main className="flex-1 ml-64 p-8 overflow-y-auto print:ml-0 print:p-0 print:overflow-visible">
         {children}
       </main>
     </div>
@@ -102,63 +106,79 @@ export default function App() {
   return (
     <AuthProvider>
       <Router>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          
-          <Route path="/" element={
-            <ProtectedRoute requiredModule="dashboard">
-              <Layout><Dashboard /></Layout>
-            </ProtectedRoute>
-          } />
-          <Route path="/purchases" element={
-            <ProtectedRoute requiredModule="purchases">
-              <Layout><Purchases /></Layout>
-            </ProtectedRoute>
-          } />
-          <Route path="/processing" element={
-            <ProtectedRoute requiredModule="processing">
-              <Layout><ProcessingWizard /></Layout>
-            </ProtectedRoute>
-          } />
-          <Route path="/inventory" element={
-            <ProtectedRoute requiredModule="inventory">
-              <Layout><Inventory /></Layout>
-            </ProtectedRoute>
-          } />
-          <Route path="/suppliers" element={
-            <ProtectedRoute requiredModule="suppliers">
-              <Layout><Suppliers /></Layout>
-            </ProtectedRoute>
-          } />
-          <Route path="/catalog" element={
-            <ProtectedRoute requiredModule="catalog">
-              <Layout><Catalog /></Layout>
-            </ProtectedRoute>
-          } />
-          <Route path="/approvals" element={
-            <ProtectedRoute>
-              <Layout><Approvals /></Layout>
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/settings" element={
-            <ProtectedRoute>
-              <Layout><AdminSettings /></Layout>
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/traceability" element={
-            <ProtectedRoute requiredModule="inventory">
-              <Layout><Traceability /></Layout>
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/trace-viewer" element={
-            <ProtectedRoute requiredModule="inventory">
-              <TraceViewer />
-            </ProtectedRoute>
-          } />
-        </Routes>
+        <Suspense fallback={
+          <div className="min-h-screen flex items-center justify-center bg-stone-50">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-500"></div>
+          </div>
+        }>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            
+            <Route path="/" element={
+              <ProtectedRoute requiredModule="dashboard">
+                <Layout><Dashboard /></Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/purchases" element={
+              <ProtectedRoute requiredModule="purchases">
+                <Layout><Purchases /></Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/processing" element={
+              <ProtectedRoute requiredModule="processing">
+                <Layout><ProcessingWizard /></Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/manufacturing" element={
+              <ProtectedRoute requiredModule="processing">
+                <Layout><ManufacturingOrders /></Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/inventory" element={
+              <ProtectedRoute requiredModule="inventory">
+                <Layout><Inventory /></Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/transfer" element={
+              <ProtectedRoute requiredModule="inventory">
+                <Layout><StockTransfer /></Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/suppliers" element={
+              <ProtectedRoute requiredModule="suppliers">
+                <Layout><Suppliers /></Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/catalog" element={
+              <ProtectedRoute requiredModule="catalog">
+                <Layout><Catalog /></Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/approvals" element={
+              <ProtectedRoute>
+                <Layout><Approvals /></Layout>
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/settings" element={
+              <ProtectedRoute>
+                <Layout><AdminSettings /></Layout>
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/traceability" element={
+              <ProtectedRoute requiredModule="inventory">
+                <Layout><Traceability /></Layout>
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/trace-viewer" element={
+              <ProtectedRoute requiredModule="inventory">
+                <TraceViewer />
+              </ProtectedRoute>
+            } />
+          </Routes>
+        </Suspense>
       </Router>
     </AuthProvider>
   );

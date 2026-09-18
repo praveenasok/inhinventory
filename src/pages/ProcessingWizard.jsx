@@ -43,6 +43,8 @@ export default function ProcessingWizard() {
   });
 
   const [laborCost, setLaborCost] = useState('');
+  const [processingDate, setProcessingDate] = useState(new Date().toISOString().split('T')[0]);
+  const [comment, setComment] = useState('');
 
   const [yieldPercentage, setYieldPercentage] = useState(0);
   const [success, setSuccess] = useState(false);
@@ -78,7 +80,7 @@ export default function ProcessingWizard() {
       if (lot) {
         if (!['Goli', 'Segregated Goli', 'Fancy'].includes(lot.materialType)) {
           if (lot.lengths) {
-            setInputLengths(lot.lengths.map(l => ({ length: l.length, weight: '', maxWeight: l.weight })));
+            setInputLengths(lot.lengths.map(l => ({ length: l.length, weight: l.weight.toString(), maxWeight: l.weight })));
           } else {
             setInputLengths([]);
           }
@@ -109,6 +111,8 @@ export default function ProcessingWizard() {
       setTargetOutput('INHNR1x1');
       setSegregatedOutputs(COLORS.reduce((acc, color) => ({ ...acc, [color]: '' }), {}));
       setLaborCost('');
+      setProcessingDate(new Date().toISOString().split('T')[0]);
+      setComment('');
     }
   }, [selectedLotId, lots, rawMaterials]);
 
@@ -222,7 +226,7 @@ export default function ProcessingWizard() {
     }
 
     try {
-      const dateStr = new Date().toISOString().slice(0,10).replace(/-/g, '');
+      const dateStr = processingDate.replace(/-/g, '');
       
       let maxSeq = 0;
       lots.forEach(l => {
@@ -260,7 +264,8 @@ export default function ProcessingWizard() {
         laborCost: Number(laborCost || 0) * inW,
         laborCostPerKg: Number(laborCost || 0),
         effectiveCostPerKg: effectiveCostPerKg,
-        processedAt: new Date(),
+        processedAt: new Date(processingDate),
+        comment: comment,
         processedBy: 'Admin'
       };
 
@@ -284,7 +289,8 @@ export default function ProcessingWizard() {
           purchaseDate: new Date(),
           status: 'Raw',
           currentStage: 'Initial',
-          parentLotId: selectedLotId
+          parentLotId: selectedLotId,
+          workroomId: selectedLot.workroomId || null
         };
       } else if (targetOutput === 'Segregated Goli') {
         const supplier = suppliers.find(s => s.id === selectedLot.supplierId);
@@ -316,7 +322,8 @@ export default function ProcessingWizard() {
               purchaseDate: new Date(),
               status: 'Raw',
               currentStage: 'Initial',
-              parentLotId: selectedLotId
+              parentLotId: selectedLotId,
+              workroomId: selectedLot.workroomId || null
             });
           }
         }
@@ -353,7 +360,7 @@ export default function ProcessingWizard() {
           }
           currentSeq++;
           const oLotId = `LOT-${targetOutput}-${o.length}-${o.weight}KG-${dateStr}-${currentSeq}`;
-          return { length: Number(o.length), weight: Number(o.weight), rate: r, outputLotId: oLotId };
+          return { length: Number(o.length), weight: Number(o.weight), rate: r, outputLotId: oLotId, workroomId: selectedLot.workroomId || null };
         });
         
         // Save calculation details for the Approvals screen
@@ -405,6 +412,8 @@ export default function ProcessingWizard() {
           foreignMaterial: '', adulterationSynthetics: '', adulterationOil: ''
         });
         setLaborCost('');
+        setProcessingDate(new Date().toISOString().split('T')[0]);
+        setComment('');
         fetchInitialData();
       }, 3000);
 
@@ -488,7 +497,7 @@ export default function ProcessingWizard() {
                               <label className="block text-xs font-semibold text-blue-800 mb-1">{il.length}" (Max: {il.maxWeight}kg)</label>
                               <input 
                                 type="number" 
-                                step="0.01"
+                                step="0.001"
                                 min="0"
                                 max={il.maxWeight}
                                 value={il.weight}
@@ -511,7 +520,7 @@ export default function ProcessingWizard() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Input Weight (Kg) to Process</label>
                     <input 
                       type="number" 
-                      step="0.01"
+                      step="0.001"
                       required
                       value={inputWeight}
                       onChange={(e) => setInputWeight(e.target.value)}
@@ -520,6 +529,28 @@ export default function ProcessingWizard() {
                   </div>
                 )}
               </div>
+              
+              <div className="col-span-2 md:col-span-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Processing Date</label>
+                <input 
+                  type="date"
+                  required
+                  value={processingDate}
+                  onChange={(e) => setProcessingDate(e.target.value)}
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border bg-white"
+                />
+              </div>
+              <div className="col-span-2 md:col-span-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Comment</label>
+                <textarea 
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  rows="1"
+                  placeholder="Optional comment..."
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border bg-white resize-none"
+                />
+              </div>
+
             </div>
           </div>
 
@@ -538,7 +569,7 @@ export default function ProcessingWizard() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Fancy Output Weight (Kg)</label>
                   <input 
                     type="number" 
-                    step="0.01"
+                    step="0.001"
                     required
                     value={fancyOutputWeight}
                     onChange={(e) => setFancyOutputWeight(e.target.value)}
@@ -553,7 +584,7 @@ export default function ProcessingWizard() {
                       <label className="block text-xs font-semibold text-purple-800 mb-1">{color}</label>
                       <input 
                         type="number" 
-                        step="0.01"
+                        step="0.001"
                         min="0"
                         value={segregatedOutputs[color]}
                         onChange={(e) => handleSegregatedOutputChange(color, e.target.value)}
@@ -597,7 +628,7 @@ export default function ProcessingWizard() {
                         <label className="block text-xs text-gray-500 mb-1">Weight (Kg)</label>
                         <input 
                           type="number" 
-                          step="0.01"
+                          step="0.001"
                           required
                           value={out.weight}
                           onChange={(e) => handleInhnrOutputChange(idx, 'weight', e.target.value)}
@@ -649,7 +680,7 @@ export default function ProcessingWizard() {
                   <label className="block text-sm font-medium text-red-700 mb-1">{item.label}</label>
                   <input 
                     type="number" 
-                    step="0.01"
+                    step="0.001"
                     min="0"
                     value={wastage[item.key]}
                     onChange={(e) => handleWastageChange(item.key, e.target.value)}
@@ -712,7 +743,7 @@ export default function ProcessingWizard() {
                       <input 
                         type="number" 
                         min="0"
-                        step="0.01"
+                        step="0.001"
                         value={laborCost}
                         onChange={(e) => setLaborCost(e.target.value)}
                         className="w-24 px-2 py-1 text-right text-blue-900 rounded border border-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
